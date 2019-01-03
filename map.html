@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Map of US Gun Deaths</title>
+
+    <link rel="stylesheet" type="text/css" href="styles.css">
+    <script src="https://d3js.org/d3.v4.min.js"></script>
+    <script src="https://d3js.org/topojson.v2.min.js"></script>
+
+    </script>
+  </head>
+  <nav style="height:50px;background-color:grey;">
+  </nav>
+  <body>
+  </body>
+  <script type="text/javascript">
+    window.onwheel = function(){ return false; }
+
+    var svg = d3.select("body").append("svg");
+    var g = svg.append("g");
+
+    var projection = d3.geoAlbersUsa()
+      .translate([680, 350])
+      .scale(1700);
+
+    var path = d3.geoPath()
+        .projection(projection);
+
+    var tallycity = {};
+    var tallyFemale = {};
+    var tallyMale = {};
+    var tallyChild = {};
+    var tallyTeen = {};
+    var tallyAdult = {};
+
+
+    svg.on("wheel.zoom",function(){
+      var oldScale = projection.scale();
+      var newScale = Math.max(oldScale - 1.5*event.deltaY, 1000);
+      newScale = Math.min(newScale, 10000);
+      var cor = projection.invert([event.offsetX, event.offsetY]);
+      projection.scale(newScale);
+      var newPos = projection(cor);
+      var curr = projection.translate();
+      projection.translate([curr[0] + (event.offsetX - newPos[0]), curr[1] + (event.offsetY - newPos[1])]);
+      g.selectAll("path").attr("d", path);
+      g.selectAll('circle')
+      .attr("cx", function (d) { var cx = [d.lng, d.lat]; return projection(cx)[0]; })
+  		.attr("cy", function (d) { var cy = [d.lng, d.lat]; return projection(cy)[1]; });
+    })
+      .call(d3.drag().on("drag", function(){
+        var curr = projection.translate();
+        projection.translate([curr[0] + d3.event.dx,
+                              curr[1] + d3.event.dy]);
+        g.selectAll("path").attr("d", path);
+        g.selectAll('circle')
+        .attr("cx", function (d) { var cx = [d.lng, d.lat]; return projection(cx)[0]; })
+        .attr("cy", function (d) { var cy = [d.lng, d.lat]; return projection(cy)[1]; });
+      }));
+
+
+    d3.queue()
+      .defer(d3.json, "us.json")
+      .defer(d3.csv, "SlateGunDeaths.csv")
+      .defer(d3.csv, "SlateGunDeaths2.csv")
+      .awaitAll(ready);
+
+    var circ;
+
+    function ready(error, mapdata){
+      g.selectAll("path")
+        .data(topojson.feature(mapdata[0], mapdata[0].objects.states).features)
+        .enter().append("path")
+          .attr('class', "states")
+          .attr('d', path)
+          .attr("stroke", "grey");
+
+//create group for each circle and pass in their data using pie generator
+//append path to all the groups created for each circle
+//
+
+      circs = g.selectAll("circle")
+    		.data(mapdata[2])
+          .enter()
+        		.append("circle")
+            .attr("class", function(d){ return d.city})
+        		.attr("cx", function (d) { var cx = [d.lng, d.lat]; return projection(cx)[0]; })
+        		.attr("cy", function (d) { var cy = [d.lng, d.lat]; return projection(cy)[1]; })
+        		.attr("r", 2)
+            .attr('fill', "red")
+            .style('opacity', .4)
+            .each(countCity)
+
+            .on("mouseover", handleMouseOver)
+            .on("mouseout", handleMouseOut);
+
+      g.selectAll("default")
+        .data(mapdata[1])
+          .enter()
+            .each(countCity);
+
+      function countCity(d, item, group){
+        if(tallycity[d.city]>=1){
+          tallycity[d.city]+=1;
+          g.select('.'+d.city).attr('r', function(d){
+            return (1+(tallycity[d.city]/5)+"px")
+          })
+        }
+        else if(tallycity[d.city] == null){
+          tallycity[d.city] = 1;
+        };
+        if (d.gender == 'F'){
+          if(tallyFemale[d.city] == null){
+            tallyFemale[d.city] = 1;
+          }
+          else {
+            tallyFemale[d.city] +=1;
+          }
+        }
+        else {
+          if(tallyMale[d.city] == null){
+            tallyMale[d.city] = 1;
+          }
+          else {
+            tallyMale[d.city] +=1;
+          }
+        }
+        if(d.ageGroup == '1'){
+          if(tallyChild[d.city] == null){
+            tallyChild[d.city] = 1;
+          }
+          else {
+            tallyChild[d.city] +=1;
+          }
+        }
+        if(d.ageGroup == '2'){
+          if(tallyTeen[d.city] == null){
+            tallyTeen[d.city] = 1;
+          }
+          else {
+            tallyTeen[d.city] +=1;
+          }
+        }
+        if(d.ageGroup == '3'){
+          if(tallyAdult[d.city] == null){
+            tallyAdult[d.city] = 1;
+          }
+          else {
+            tallyAdult[d.city] +=1;
+          }
+        }
+      }
+    }
+
+    d3.select('nav')
+      .append('button')
+        .text("FEMALES")
+        .attr('class', "femaleButton")
+        .on('click', callingFemales);
+
+    d3.select('nav')
+      .append('button')
+        .text("MALES")
+        .attr('class', "maleButton")
+        .on('click', callingMales);
+
+    d3.select('nav')
+      .append('button')
+        .text("CHILDREN")
+        .attr('class', "childButton")
+        .on('click', callingChildren);
+
+    d3.select('nav')
+      .append('button')
+        .text("TEENS")
+        .attr('class', "teenButton")
+        .on('click', callingTeens);
+
+    d3.select('nav')
+      .append('button')
+        .text("ADULTS")
+        .attr('class', "adultButton")
+        .on('click', callingAdults);
+
+    d3.select('nav')
+      .append('button')
+        .attr('class', "summary");
+
+
+    function modCircleFemale(d){
+      g.select('.'+d.city).attr('r', function(d){
+        return (1+(tallyFemale[d.city])+"px");})
+    }
+    function modCircleMale(d){
+      g.select('.'+d.city).attr('r', function(d){
+        return (1+(tallyMale[d.city]/5)+"px");})
+    }
+    function modCircleChildren(d){
+      g.select('.'+d.city).attr('r', function(d){
+        return (1+(tallyChild[d.city]*2)+"px");})
+    }
+    function modCircleTeens(d){
+      g.select('.'+d.city).attr('r', function(d){
+        return (1+(tallyTeen[d.city]*2)+"px");})
+    }
+    function modCircleAdults(d){
+      g.select('.'+d.city).attr('r', function(d){
+        return (1+(tallyAdult[d.city]/4)+"px");})
+    }
+
+    function callingFemales(){
+      circs.each(modCircleFemale);
+    }
+    function callingMales(){
+      circs.each(modCircleMale);
+    }
+    function callingChildren(){
+      circs.each(modCircleChildren);
+    }
+    function callingTeens(){
+      circs.each(modCircleTeens);
+    }
+    function callingAdults(){
+      circs.each(modCircleAdults);
+    }
+
+    function displayCity(c){
+
+      var fun = tallycity[c];
+      var things = d3.select('.summary').text(c+' had '+fun+' gun-related deaths this year:\n'+tallyFemale[c]+' were female,\n'+tallyChild[c]+' were Children,\n\r'+tallyTeen[c]+' were teenagers,\n'+tallyAdult[c]+' were adults\n');
+    }
+    function handleMouseOver(d) {
+      d3.select(this).style('opacity', '1.0');
+      var city = d3.select(this).attr('class');
+      displayCity(city);
+      //
+
+    }
+
+    function handleMouseOut(d, i) {
+      d3.select(this).style('opacity', '.4');
+    }
+
+
+  </script>
+</html>
